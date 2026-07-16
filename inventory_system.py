@@ -1,82 +1,100 @@
+from database import (
+    add_product_to_database,
+    get_all_products,
+    search_product_in_database,
+    remove_product_from_database,
+    update_product_in_database,
+    get_low_stock_products_from_database
+)
 from config import ADMIN_EMAIL, ADMIN_PASSWORD
-import json
-try:
-    with open("product.json", "r") as document:
-        data = json.load(document)
-except FileNotFoundError:
-    data = {}
-    print("No product.json file found. Creating a new one.")
+
 def view_low_stock_products():
-    for product_name, product_details in data.items():
-        if product_details['stock_quantity'] < 5:
-            print("Low Stock Products:")
-            print(f"Name: {product_name}, Price: {product_details['price']}, Stock Quantity: {product_details['stock_quantity']}")
-            print("This product is low in stock. Please consider restocking.")
-def save_data():
-    with open("product.json", "w") as document:
-        json.dump(data, document) 
-def add_product():
-    product_name = input("Enter product name: ")
-    if product_name in data:
-        print("Product already exists.")
+    try:
+        limit = int(input("Enter the stock quantity limit: "))
+        if limit < 0:
+            print("Limit must be a non-negative integer.")
+            return
+    except ValueError:
+        print("Invalid input. Please enter a numeric value.")
         return
+
+    low_stock_products = get_low_stock_products_from_database(limit)
+
+    if low_stock_products:
+        print(f"Products with stock quantity less than {limit}:")
+        for product in low_stock_products:
+            print(
+                f"ID: {product[0]}, "
+                f"Name: {product[1]}, "
+                f"Price: {product[2]}, "
+                f"Stock Quantity: {product[3]}"
+            )
     else:
-        data[product_name] = {}
-        save_data()
-        print("Product successfully added. Please add product details.")    
+        print(f"No products found with stock quantity less than {limit}.")
+def add_product():
+    product_name = input("Enter product name: ").strip()
+    if product_name:
+        existing_product = search_product_in_database(product_name)
+        if existing_product:
+            print("Product already exists.")
+            return
         try:
             product_price = float(input("Enter product price: "))
-            data[product_name]["price"] = product_price
-            print("Product details successfully added.")
-        except ValueError:
-            print("Invalid price. Please enter a numeric value.")
-            del data[product_name]  # Remove the product if price input is invalid
-            save_data()
-            return
-        try:
             product_stock_quantity = int(input("Enter product stock quantity: "))
-            data[product_name]["stock_quantity"] = product_stock_quantity
-            print("Product details successfully added.")
+            if product_price < 0 or product_stock_quantity < 0:
+                print("Price and stock quantity must be non-negative.")
+                return
+            add_product_to_database(product_name, product_price, product_stock_quantity)
+            print("Product successfully added.")
         except ValueError:
-            print("Invalid stock quantity. Please enter a numeric value.")
-            del data[product_name]  # Remove the product if stock quantity input is invalid
-            save_data()
-            return
-        save_data()
+            print("Invalid input. Please enter numeric values for price and stock quantity.")
+    else:
+        print("Invalid product name.")
 def remove_product():
-    product_name = input("Enter product name to remove: ")
-    if product_name in data:
-        del data[product_name]
-        save_data()
-        print("Product successfully removed.")
+    product_name = input("Enter product name to remove: ").strip()
+    if product_name:
+        deleted_count = remove_product_from_database(product_name)
+        if deleted_count > 0:
+            print("Product successfully removed.")
+        else:
+            print("Product not found.")
     else:
-        print("Product not found.")
+        print("Invalid product name.")
 def update_product():
-    product_name = input("Enter product name to update: ")
-    if product_name in data:
-        try:
-            product_price = float(input("Enter new product price: "))
-            data[product_name]["price"] = product_price
-            print("Product price successfully updated.")
-        except ValueError:
-            print("Invalid price. Please enter a numeric value.")
-            return
-        try:
-            product_stock_quantity = int(input("Enter new product stock quantity: "))
-            data[product_name]["stock_quantity"] = product_stock_quantity
-            print("Product stock quantity successfully updated.")
-        except ValueError:
-            print("Invalid stock quantity. Please enter a numeric value.")
-            return
-        save_data()
+    product_name = input("Enter product name to update: ").strip()
+    if product_name:
+        product = search_product_in_database(product_name)
+        if product:
+            try:
+                new_price = float(input("Enter new product price: "))
+                new_stock_quantity = int(input("Enter new product stock quantity: "))
+                if new_price < 0 or new_stock_quantity < 0:
+                    print("Price and stock quantity must be non-negative.")
+                    return
+                updated_count = update_product_in_database(product_name, new_price, new_stock_quantity)
+                if updated_count > 0:
+                    print("Product successfully updated.")
+                else:
+                    print("Failed to update product.")
+            except ValueError:
+                print("Invalid input. Please enter numeric values for price and stock quantity.")
+        else:
+            print("Product not found.")
     else:
-        print("Product not found.")
+        print("Invalid product name.")
 def view_products():
-    if data:
+    products = get_all_products()
+
+    if products:
         print("Products:")
-        for product_name, product_details in data.items():
-            print(f"Name: {product_name}, Price: {product_details['price']}, Stock Quantity: {product_details['stock_quantity']}")
-        view_low_stock_products()
+
+        for product in products:
+            print(
+                f"ID: {product[0]}, "
+                f"Name: {product[1]}, "
+                f"Price: {product[2]}, "
+                f"Stock Quantity: {product[3]}"
+            )
     else:
         print("No products found.")
 def admin_login():
@@ -104,18 +122,28 @@ def admin_login():
             elif choice == "5":
                 search_product()
             elif choice == "6":
+                view_low_stock_products()
+            elif choice == "7":
                 print("Logging out...")
                 break
             else:
                 print("Invalid choice. Please try again.")
     else:
         print("Invalid admin credentials.")
-def search_product():   
+def search_product():
     product_name = input("Enter product name to search: ").strip()
-    if product_name in data:
-        product_details = data[product_name]
-        print(f"Name: {product_name}, Price: {product_details['price']}, Stock Quantity: {product_details['stock_quantity']}")
+    if product_name:
+        product = search_product_in_database(product_name)
+        if product:
+            print(
+                f"ID: {product[0]}, "
+                f"Name: {product[1]}, "
+                f"Price: {product[2]}, "
+                f"Stock Quantity: {product[3]}"
+            )
+        else:
+            print("Product not found.")
     else:
-        print("Product not found.")
+        print("Invalid product name.")
 
 admin_login()
